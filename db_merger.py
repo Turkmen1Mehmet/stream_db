@@ -68,45 +68,38 @@ def extract_date_from_filename(filename, file_path):
         return None
 
 
-def merge_and_process_databases(main_folder, output_db_path):
-    """Ana klasördeki veritabanlarını birleştirir ve işleme alır."""
-    all_files = []
-
-    # Klasör ve dosya tarama
-    for folder in os.listdir(main_folder):
-        folder_path = os.path.join(main_folder, folder)
-        if os.path.isdir(folder_path):
-            for file in os.listdir(folder_path):
-                if file.endswith(".db"):
-                    file_path = os.path.join(folder_path, file)
-                    file_date = extract_date_from_filename(file, file_path)
-                    if file_date:
-                        all_files.append((file_path, file_date))
-
-    # Tarihe göre sıralama
-    all_files.sort(key=lambda x: x[1])
-
+def merge_and_process_databases(db_files, output_db_path):
+    """Verilen .db dosyalarını birleştirir ve işleme alır."""
     all_data = []
-    for file_path, date in all_files:
-        #print(f"File: {file_path}, Date Extracted: {date}")
+
+    for file_path in db_files:
         conn = sqlite3.connect(file_path)
+
+        # Tabloları al
         query = "SELECT name FROM sqlite_master WHERE type='table';"
         tables = pd.read_sql(query, conn)
+
         if tables.empty:
             conn.close()
-            continue
+            continue  # Eğer tablo yoksa bu dosyayı atla
+        
+        # İlk tabloyu oku
         table_name = tables.iloc[0, 0]
         data = pd.read_sql(f"SELECT * FROM {table_name}", conn)
-        data = remove_duplicate_rows(data)
-        data["tarih"] = date
-        all_data.append(data)
         conn.close()
+
+        if not data.empty:
+            data["tarih"] = extract_date_from_filename(os.path.basename(file_path), file_path)
+            all_data.append(data)
+
+    if not all_data:
+        raise ValueError("Geçerli veri içeren .db dosyası bulunamadı.")
 
     # Verileri birleştir
     combined_data = pd.concat(all_data, ignore_index=True)
 
     # Tarih sütunlarına göre pivot tablo oluştur
-    date_columns = [f"mevcut_{date.strftime('%d%m%y')}" for _, date in all_files]
+    date_columns = [f"mevcut_{data['tarih'].iloc[0].strftime('%d%m%y')}" for data in all_data]
     pivot_data = combined_data.pivot_table(
         index=["etiket", "isim", "renk"],
         columns="tarih",
