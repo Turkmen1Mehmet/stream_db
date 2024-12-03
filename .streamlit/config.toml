@@ -1,0 +1,6 @@
+[server]
+
+# Max size, in megabytes, for files uploaded with the file_uploader.
+# Default: 200
+maxUploadSize = 50000
+maxMessageSize = 50000
