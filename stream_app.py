@@ -11,6 +11,15 @@ st.title("SQLite Veritabanı Yükleyici ve Görüntüleyici")
 # Kullanıcıdan işlem seçimi
 option = st.radio("Bir işlem seçin:", ("Veritabanı yükle", "ZIP dosyası yükle ve birleştir"))
 
+def find_db_files(folder_path):
+    """Verilen klasörün altındaki tüm .db dosyalarını bul."""
+    db_files = []
+    for root, dirs, files in os.walk(folder_path):
+        for file in files:
+            if file.endswith(".db"):
+                db_files.append(os.path.join(root, file))
+    return db_files
+
 if option == "Veritabanı yükle":
     # Kullanıcı SQLite dosyasını yükler
     uploaded_file = st.file_uploader("SQLite veritabanı dosyasını seçin (.db)", type=["db"])
@@ -54,59 +63,64 @@ if option == "Veritabanı yükle":
         conn.close()
 
 elif option == "ZIP dosyası yükle ve birleştir":
-    uploaded_zip = st.file_uploader("ZIP dosyasını yükleyin (içinde .db dosyaları olmalı):", type=["zip"])
+    uploaded_zip = st.file_uploader("ZIP dosyasını yükleyin (içinde klasörler ve .db dosyaları olmalı):", type=["zip"])
 
     if uploaded_zip:
         # Geçici bir dizin oluştur
         temp_dir = "temp_folder"
         os.makedirs(temp_dir, exist_ok=True)
         
-        # ZIP dosyasını aç
-        with zipfile.ZipFile(uploaded_zip, 'r') as zip_ref:
-            zip_ref.extractall(temp_dir)
-            st.success(f"ZIP dosyası açıldı: {temp_dir}")
-        
-        # Klasör içeriğini listele
-        files = [f for f in os.listdir(temp_dir) if f.endswith(".db")]
-        if files:
-            st.write(f"ZIP dosyasından çıkarılan veritabanları: {files}")
+        try:
+            # ZIP dosyasını aç
+            with zipfile.ZipFile(uploaded_zip, 'r') as zip_ref:
+                zip_ref.extractall(temp_dir)
+                st.success(f"ZIP dosyası başarıyla açıldı: {temp_dir}")
             
-            # Tüm dosyaları birleştirme
-            output_db_path = "merged_database.db"
-            merge_and_process_databases(temp_dir, output_db_path)
-            st.success(f"Veritabanları başarıyla birleştirildi ve {output_db_path} oluşturuldu.")
-            
-            # Birleştirilmiş veritabanını incele
-            conn = sqlite3.connect(output_db_path)
-            query = "SELECT name FROM sqlite_master WHERE type='table';"
-            tables = pd.read_sql_query(query, conn)
-            st.write("Birleştirilmiş Veritabanındaki Tablolar:", tables)
-
-            if not tables.empty:
-                first_table = tables["name"][0]
-                st.write(f"Önizleme Yapılan Tablo: {first_table}")
+            # Klasör ve alt klasörlerdeki tüm .db dosyalarını bul
+            db_files = find_db_files(temp_dir)
+            if db_files:
+                st.write(f"Bulunan .db dosyaları: {db_files}")
                 
-                data = pd.read_sql_query(f'SELECT * FROM "{first_table}"', conn)
+                # Tüm dosyaları birleştirme
+                output_db_path = "merged_database.db"
+                merge_and_process_databases(temp_dir, output_db_path)
+                st.success(f"Veritabanları başarıyla birleştirildi ve {output_db_path} oluşturuldu.")
+                
+                # Birleştirilmiş veritabanını incele
+                conn = sqlite3.connect(output_db_path)
+                query = "SELECT name FROM sqlite_master WHERE type='table';"
+                tables = pd.read_sql_query(query, conn)
+                st.write("Birleştirilmiş Veritabanındaki Tablolar:", tables)
 
-                if not data.empty:
-                    default_limit = 10
-                    row_limit = st.number_input(
-                        "Gösterilecek satır sayısını girin:",
-                        min_value=1,
-                        max_value=len(data),
-                        value=default_limit,
-                        step=1,
-                    )
-                    show_all = st.button("Tüm Satırları Göster", key=f"show_all_{first_table}")
+                if not tables.empty:
+                    first_table = tables["name"][0]
+                    st.write(f"Önizleme Yapılan Tablo: {first_table}")
+                    
+                    data = pd.read_sql_query(f'SELECT * FROM "{first_table}"', conn)
 
-                    if show_all:
-                        st.write(data)
+                    if not data.empty:
+                        default_limit = 10
+                        row_limit = st.number_input(
+                            "Gösterilecek satır sayısını girin:",
+                            min_value=1,
+                            max_value=len(data),
+                            value=default_limit,
+                            step=1,
+                        )
+                        show_all = st.button("Tüm Satırları Göster", key=f"show_all_{first_table}")
+
+                        if show_all:
+                            st.write(data)
+                        else:
+                            st.write(data.head(row_limit))
                     else:
-                        st.write(data.head(row_limit))
+                        st.warning(f"Tablo '{first_table}' boş.")
                 else:
-                    st.warning(f"Tablo '{first_table}' boş.")
+                    st.warning("Birleştirilmiş veritabanında hiçbir tablo bulunamadı.")
+                conn.close()
             else:
-                st.warning("Birleştirilmiş veritabanında hiçbir tablo bulunamadı.")
-            conn.close()
-        else:
-            st.error("ZIP dosyasından çıkarılan .db dosyası bulunamadı.")
+                st.error("Klasörlerde herhangi bir .db dosyası bulunamadı. ZIP dosyasını kontrol edin.")
+        except zipfile.BadZipFile:
+            st.error("ZIP dosyası bozuk veya geçersiz. Lütfen doğru bir dosya yükleyin.")
+        except Exception as e:
+            st.error(f"Bir hata oluştu: {e}")
