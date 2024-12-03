@@ -94,8 +94,7 @@ elif option == "ZIP dosyası yükle ve birleştir":
                 
                 # Geçerli dosyaları birleştirme
                 output_db_path = "merged_database.db"
-                # merge_and_process_databases fonksiyonuna liste yerine geçerli dosya yolları gönderiliyor
-                merge_and_process_databases(valid_db_files, output_db_path)
+                merge_and_process_databases(temp_dir, output_db_path)
                 st.success(f"Veritabanları başarıyla birleştirildi ve {output_db_path} oluşturuldu.")
                 
                 # Birleştirilmiş veritabanını incele
