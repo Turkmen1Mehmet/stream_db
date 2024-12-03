@@ -3,9 +3,19 @@ import sqlite3
 import pandas as pd
 import os
 from db_merger import merge_and_process_databases
+import tkinter as tk
+from tkinter import filedialog
 
+# Streamlit başlık ve ayarlar
 st.set_page_config(page_title="Veritabanı Görüntüleyici", layout="wide")
 st.title("SQLite Veritabanı Yükleyici ve Görüntüleyici")
+
+# Klasör seçici fonksiyonu
+def select_folder():
+    root = tk.Tk()
+    root.withdraw()  # Tkinter GUI'yi gizler
+    folder_path = filedialog.askdirectory()  # Klasör seçme penceresi açar
+    return folder_path
 
 # Seçim menüsü
 option = st.radio("Bir işlem seçin:", ("Veritabanı yükle", "Klasör seç ve birleştir"))
@@ -64,52 +74,57 @@ if option == "Veritabanı yükle":
         conn.close()
 
 elif option == "Klasör seç ve birleştir":
-    # Klasör seçim alanı
-    folder_path = st.text_input("Klasör yolunu girin:")
-    if folder_path and os.path.isdir(folder_path):
-        # Birleştirme işlemi
-        output_db_path = "temp_database.db"
-        merge_and_process_databases(folder_path, output_db_path)
-        st.success(f"Veritabanları başarıyla birleştirildi ve {output_db_path} olarak kaydedildi.")
+    # Kullanıcıdan klasör seçmesini isteyen bir buton
+    if st.button("Klasör Seç"):
+        folder_path = select_folder()
+        if folder_path:
+            st.success(f"Seçilen Klasör: {folder_path}")
 
-        # Birleştirilmiş veritabanını aç
-        conn = sqlite3.connect(output_db_path)
+            # Birleştirme işlemi
+            output_db_path = "temp_database.db"
+            merge_and_process_databases(folder_path, output_db_path)
+            st.success(f"Veritabanları başarıyla birleştirildi ve {output_db_path} olarak kaydedildi.")
 
-        # Tablo adlarını sorgula
-        query = "SELECT name FROM sqlite_master WHERE type='table';"
-        tables = pd.read_sql_query(query, conn)
-        st.write("Birleştirilmiş Veritabanındaki Tablolar:", tables)
+            # Birleştirilmiş veritabanını aç
+            conn = sqlite3.connect(output_db_path)
 
-        if not tables.empty:
-            first_table = tables["name"][0]
-            st.write(f"Önizleme Yapılan Tablo: {first_table}")
+            # Tablo adlarını sorgula
+            query = "SELECT name FROM sqlite_master WHERE type='table';"
+            tables = pd.read_sql_query(query, conn)
+            st.write("Birleştirilmiş Veritabanındaki Tablolar:", tables)
 
-            # İlk tabloyu oku
-            try:
-                data = pd.read_sql_query(f'SELECT * FROM "{first_table}"', conn)
+            if not tables.empty:
+                first_table = tables["name"][0]
+                st.write(f"Önizleme Yapılan Tablo: {first_table}")
 
-                if not data.empty:
-                    # Kullanıcıdan satır sayısı al
-                    default_limit = 10
-                    row_limit = st.number_input(
-                        "Gösterilecek satır sayısını girin:",
-                        min_value=1,
-                        max_value=len(data),
-                        value=default_limit,
-                        step=1,
-                    )
-                    show_all = st.button("Tüm Satırları Göster", key="show_all")
+                # İlk tabloyu oku
+                try:
+                    data = pd.read_sql_query(f'SELECT * FROM "{first_table}"', conn)
 
-                    if show_all:
-                        st.write(f"Tüm {len(data)} satır gösteriliyor:")
-                        st.write(data)
+                    if not data.empty:
+                        # Kullanıcıdan satır sayısı al
+                        default_limit = 10
+                        row_limit = st.number_input(
+                            "Gösterilecek satır sayısını girin:",
+                            min_value=1,
+                            max_value=len(data),
+                            value=default_limit,
+                            step=1,
+                        )
+                        show_all = st.button("Tüm Satırları Göster", key="show_all")
+
+                        if show_all:
+                            st.write(f"Tüm {len(data)} satır gösteriliyor:")
+                            st.write(data)
+                        else:
+                            st.write(f"{min(row_limit, len(data))} satır gösteriliyor:")
+                            st.write(data.head(row_limit))
                     else:
-                        st.write(f"{min(row_limit, len(data))} satır gösteriliyor:")
-                        st.write(data.head(row_limit))
-                else:
-                    st.warning(f"Tablo '{first_table}' boş.")
-            except Exception as e:
-                st.error(f"Tablo okunurken hata oluştu: {e}")
+                        st.warning(f"Tablo '{first_table}' boş.")
+                except Exception as e:
+                    st.error(f"Tablo okunurken hata oluştu: {e}")
+            else:
+                st.warning("Birleştirilmiş veritabanında hiçbir tablo bulunamadı.")
+            conn.close()
         else:
-            st.warning("Birleştirilmiş veritabanında hiçbir tablo bulunamadı.")
-        conn.close()
+            st.error("Klasör seçilmedi.")
