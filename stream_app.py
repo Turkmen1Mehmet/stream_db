@@ -4,6 +4,7 @@ import pandas as pd
 import os
 import zipfile
 from db_merger import merge_and_process_databases
+from db_merger import extract_date_from_filename
 
 st.set_page_config(page_title="Veritabanı Görüntüleyici", layout="wide")
 st.title("SQLite Veritabanı Yükleyici ve Görüntüleyici")
@@ -27,6 +28,27 @@ def validate_db_file(db_path):
         return not tables.empty  # Tablolar varsa geçerli bir veritabanı
     except Exception:
         return False
+    
+
+def sort_db_files_by_date(db_files):
+    """
+    Verilen .db dosyalarını tarih bilgisine göre sıralar.
+    Dosya isimlerinden tarihleri çıkarır ve sıralı bir liste döndürür.
+    """
+    sorted_files = []
+    
+    for file_path in db_files:
+        filename = os.path.basename(file_path)
+        date = extract_date_from_filename(filename, file_path)
+        if date:
+            sorted_files.append((file_path, date))
+    
+    # Tarihe göre sırala
+    sorted_files.sort(key=lambda x: x[1])
+    
+    # Sadece dosya yollarını döndür
+    return [file[0] for file in sorted_files]
+
 
 # Kullanıcıdan işlem seçimi
 option = st.radio("Bir işlem seçin:", ("Veritabanı yükle", "ZIP dosyası yükle ve birleştir"))
@@ -90,11 +112,15 @@ elif option == "ZIP dosyası yükle ve birleştir":
             valid_db_files = [db for db in db_files if validate_db_file(db)]
             
             if valid_db_files:
-                st.write(f"Geçerli .db dosyaları: {valid_db_files}")
+                #st.write(f"Geçerli .db dosyaları (sıralama öncesi): {valid_db_files}")
+                
+                # Tarihe göre sıralama
+                sorted_valid_db_files = sort_db_files_by_date(valid_db_files)
+                st.write(f"Tarihe göre sıralı .db dosyaları: {sorted_valid_db_files}")
     
                 # Geçerli dosyaları birleştirme
                 output_db_path = "merged_database.db"
-                merge_and_process_databases(valid_db_files, output_db_path)
+                merge_and_process_databases(sorted_valid_db_files, output_db_path)
                 st.success(f"Veritabanları başarıyla birleştirildi ve {output_db_path} oluşturuldu.")
                 
                 # Birleştirilmiş veritabanını incele
